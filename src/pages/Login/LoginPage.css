@@ -1,0 +1,12 @@
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.login-container .login-wrapper {
+    background-color: #c8a0ff;
+    color: #1a1a11;
+    border-radius: 0.3rem;
+}
