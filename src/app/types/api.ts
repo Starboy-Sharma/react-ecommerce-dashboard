@@ -2,11 +2,13 @@ export interface ApiResponseSuccess<T> {
     status: true;
     result: T;
     message: string;
+    responseStatus: number;
 }
 
 export interface ApiResponseFailure {
     status: false;
     error: string;
+    responseStatus: number;
 }
 
 // src/utils/apiGuards.ts

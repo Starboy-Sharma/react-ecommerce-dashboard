@@ -12,15 +12,10 @@ interface LoginFormState {
   password: string;
 }
 
-interface LoginFormErrorState {
-  email: string | null;
-  password: string | null;
-  isError: boolean;
-}
-
 interface LoginFormType {
   formData: LoginFormState;
-  formErrors: LoginFormErrorState;
+  isError: boolean;
+  errorMsg: string;
 }
 
 const loginFormInitialState: LoginFormType = {
@@ -28,11 +23,8 @@ const loginFormInitialState: LoginFormType = {
     email: '',
     password: '',
   },
-  formErrors: {
-    email: null,
-    password: null,
-    isError: false,
-  },
+  errorMsg: '',
+  isError: false,
 };
 
 type LoginFormActionType =
@@ -42,7 +34,7 @@ type LoginFormActionType =
     }
   | {
       type: 'SET_FIELD_ERROR';
-      payload: { field: keyof LoginFormState; error: string | null };
+      payload: { error: string };
     }
   | { type: 'RESET_FORM' };
 
@@ -60,13 +52,10 @@ function loginFormReducer(state: LoginFormType, action: LoginFormActionType) {
     }
 
     case 'SET_FIELD_ERROR': {
-      const field = action.payload.field;
       return {
         ...state,
-        formErrors: {
-          ...state.formErrors,
-          [field]: action.payload.error,
-        },
+        isError: true,
+        errorMsg: action.payload.error,
       };
     }
 
@@ -85,9 +74,7 @@ export default function LoginPage() {
     loginFormReducer,
     loginFormInitialState
   );
-
-  const { login } = useAuth();
-
+  const { login, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const handleFieldChange =
@@ -105,8 +92,6 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Handle login
-    console.table(loginForm.formData);
 
     try {
       const response = await login(
@@ -120,6 +105,13 @@ export default function LoginPage() {
     } catch (error) {
       if (isApiError<ApiResponseFailure>(error)) {
         console.log('API Error:', error.status);
+
+        dispatch({
+          type: 'SET_FIELD_ERROR',
+          payload: {
+            error: error.error,
+          },
+        });
       } else {
         console.error('Unexpected error', error);
       }
@@ -178,8 +170,13 @@ export default function LoginPage() {
 
             {/* Submit Button */}
             <div>
+              <span className="text-red-700 text-center">
+                {loginForm.isError && '*' + loginForm.errorMsg}
+              </span>
+
               <button
                 type="submit"
+                disabled={isLoading}
                 className="w-full py-2 px-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-md hover:from-blue-600 hover:to-indigo-700 transition hover:cusror-pointer"
               >
                 Login

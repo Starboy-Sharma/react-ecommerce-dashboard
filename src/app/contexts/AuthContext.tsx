@@ -1,6 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
-import { createContext, useState, type ReactNode } from 'react';
-import { loginAdmin } from '../services/authService';
+import { createContext, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getUser, loginAdmin } from '../services/authService';
 import type { AdminUserType, LoginResult } from '../types/admin';
 import type { ApiResponseFailure, ApiResponseSuccess } from '../types/api';
 
@@ -11,61 +11,81 @@ interface AuthContextType {
     password: string
   ) => Promise<ApiResponseSuccess<LoginResult>>;
   logout: () => void;
+  isLoading: boolean;
+  isInitializing: boolean;
+  isError: boolean;
 }
-
-type Props = {
-  children: ReactNode;
-};
 
 export const AuthContext = createContext<AuthContextType | undefined>(
   undefined
 );
 
-export function AuthContextProvider({ children }: Props) {
-  const [user, setUser] = useState<AdminUserType | null>(null);
+export function AuthContextProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+
+  const {
+    data: userData,
+    isLoading: isInitializing,
+    isError,
+  } = useQuery({
+    queryKey: ['auth-check'],
+    queryFn: async (): Promise<LoginResult | null> => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return null;
+
+      try {
+        const response = await getUser();
+        if (response.status && 'result' in response) {
+          return response.result;
+        }
+        return null;
+      } catch {
+        localStorage.removeItem('authToken');
+        return null;
+      }
+    },
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const user = userData?.admin ?? null;
 
   const mutation = useMutation<
     ApiResponseSuccess<LoginResult>,
-    ApiResponseFailure, // Keep this as Error since you're throwing Error objects
+    ApiResponseFailure,
     { email: string; password: string }
   >({
     mutationFn: async ({ email, password }) => {
       const result = await loginAdmin(email, password);
-
-      // At this point, we know the HTTP request was successful
-      // But we need to check if the API response indicates success
-      if (result.status === true && 'result' in result) {
-        return result; // This is ApiResponseSuccess<LoginResult>
-      } else {
-        // This is ApiResponseFailure - convert it to a thrown error
-        throw result;
-      }
+      if (result.status && 'result' in result) return result;
+      throw result;
     },
     onSuccess: (data) => {
-      console.log('User logged in', data);
-      setUser(data.result.admin);
       localStorage.setItem('authToken', data.result.token);
-    },
-    onError: (error) => {
-      console.log('Error in logged in', error);
+      queryClient.invalidateQueries({ queryKey: ['auth-check'] });
     },
   });
 
-  const login = async (
-    email: string,
-    password: string
-  ): Promise<ApiResponseSuccess<LoginResult>> => {
-    const response = await mutation.mutateAsync({ email, password });
-    return response;
+  const login = async (email: string, password: string) => {
+    return await mutation.mutateAsync({ email, password });
   };
 
   const logout = () => {
-    setUser(null);
     localStorage.removeItem('authToken');
+    queryClient.invalidateQueries({ queryKey: ['auth-check'] });
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        isLoading: mutation.isPending,
+        isInitializing,
+        isError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
